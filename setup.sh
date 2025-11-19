@@ -128,7 +128,26 @@ docker compose exec -T -u root app sh -c "
 
 # Install Composer dependencies (as root to avoid permission issues)
 echo "  - Installing Composer dependencies..."
-docker compose exec -T -u root app composer install --no-interaction
+# Try composer install first, if it fails due to lock file mismatch, run composer update
+COMPOSER_OUTPUT=$(docker compose exec -T -u root app composer install --no-interaction 2>&1)
+COMPOSER_EXIT_CODE=$?
+
+if [ $COMPOSER_EXIT_CODE -eq 0 ]; then
+    echo "    ✅ Composer dependencies installed successfully"
+elif echo "$COMPOSER_OUTPUT" | grep -q "lock file is not up to date\|is not present in the lock file"; then
+    echo "    ⚠️  Composer lock file is out of date, updating dependencies..."
+    docker compose exec -T -u root app composer update --no-interaction
+    if [ $? -eq 0 ]; then
+        echo "    ✅ Composer dependencies updated successfully"
+    else
+        echo "    ❌ Failed to update Composer dependencies"
+        exit 1
+    fi
+else
+    echo "    ❌ Failed to install Composer dependencies"
+    echo "$COMPOSER_OUTPUT"
+    exit 1
+fi
 # Fix permissions again after composer install (volume mount may override)
 # Set ownership for code files to current user, storage/cache to www-data
 USER_ID=$(id -u)
@@ -160,10 +179,11 @@ docker compose exec -T app php artisan migrate --seed --force
 echo "  - Setting up Swagger documentation..."
 docker compose exec -T -u root app sh -c "
     mkdir -p /var/www/html/storage/api-docs
-    php artisan vendor:publish --provider \"L5Swagger\L5SwaggerServiceProvider\" --tag=l5-swagger-config
+    php artisan vendor:publish --provider \"L5Swagger\L5SwaggerServiceProvider\" --tag=l5-swagger-config 2>/dev/null || true
     php artisan l5-swagger:generate
     chown -R www-data:www-data /var/www/html/storage/api-docs
     chmod -R 775 /var/www/html/storage/api-docs
+    chmod 644 /var/www/html/storage/api-docs/*.json 2>/dev/null || true
 "
 
 echo ""
