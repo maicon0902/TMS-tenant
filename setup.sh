@@ -9,6 +9,91 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
+# Function to get PID using a port
+get_port_pid() {
+    local port=$1
+    local pid=""
+    
+    # Try lsof first (common on macOS and Linux)
+    if command -v lsof >/dev/null 2>&1; then
+        pid=$(lsof -ti:$port 2>/dev/null)
+    fi
+    
+    # Try fuser if lsof didn't work (common on Linux)
+    if [ -z "$pid" ] && command -v fuser >/dev/null 2>&1; then
+        pid=$(fuser $port/tcp 2>/dev/null | awk '{print $1}')
+    fi
+    
+    # Try ss/netstat as fallback
+    if [ -z "$pid" ] && command -v ss >/dev/null 2>&1; then
+        pid=$(ss -lptn "sport = :$port" 2>/dev/null | grep -oP 'pid=\K\d+' | head -1)
+    fi
+    
+    echo "$pid"
+}
+
+# Function to kill process using a port
+kill_port() {
+    local port=$1
+    local pid=$(get_port_pid $port)
+    
+    if [ ! -z "$pid" ]; then
+        echo "  ⚠️  Port $port is in use by PID $pid, killing process..."
+        # Try normal kill first
+        if kill -9 $pid 2>/dev/null; then
+            sleep 1
+        # Try with sudo if normal kill failed
+        elif sudo kill -9 $pid 2>/dev/null; then
+            sleep 1
+        else
+            echo "  ❌ Cannot kill process $pid. You may need to run with sudo or stop it manually."
+            return 1
+        fi
+        
+        # Verify port is free
+        local new_pid=$(get_port_pid $port)
+        if [ ! -z "$new_pid" ]; then
+            echo "  ❌ Failed to free port $port. Process $new_pid is still using it."
+            return 1
+        else
+            echo "  ✅ Port $port is now free"
+        fi
+    fi
+    return 0
+}
+
+# Stop existing Docker containers that might be using these ports
+echo "🛑 Stopping existing Docker containers..."
+docker compose down 2>/dev/null || true
+
+# Check and free required ports
+echo "🔍 Checking required ports (3000, 8080, 3306)..."
+PORTS=(3000 8080 3306)
+PORT_NAMES=("Frontend" "API/Nginx" "MySQL")
+PORT_FREE=true
+
+for i in "${!PORTS[@]}"; do
+    port=${PORTS[$i]}
+    name=${PORT_NAMES[$i]}
+    pid=$(get_port_pid $port)
+    
+    if [ ! -z "$pid" ]; then
+        echo "  ⚠️  Port $port ($name) is in use by PID $pid"
+        if ! kill_port $port; then
+            PORT_FREE=false
+        fi
+    else
+        echo "  ✅ Port $port ($name) is free"
+    fi
+done
+
+if [ "$PORT_FREE" = false ]; then
+    echo ""
+    echo "❌ Some ports are still in use. Please stop them manually and try again."
+    exit 1
+fi
+
+echo ""
 echo "📦 Starting Docker containers..."
 docker compose up -d --build
 

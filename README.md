@@ -72,8 +72,8 @@ TMS-test/
 
 ### Step 1: Clone the Repository
 ```bash
-git clone <repository-url>
-cd TMS-test
+git clone git@github.com:maicon0902/TMS-tenant.git
+cd TMS-tenant
 ```
 
 ### Step 2: Run Setup Script (Recommended)
