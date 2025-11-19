@@ -138,7 +138,7 @@ export default {
         console.error('Error loading customers:', error)
         const errorMessage = error.response?.data?.message || 
                             error.message || 
-                            'Error loading customers. Please check if the API is running on http://localhost:8080'
+                            'Error loading customers. Please check if the API is running on http://localhost:8081'
         alert(errorMessage)
       }
     },

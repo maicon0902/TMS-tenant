@@ -145,7 +145,8 @@ This will:
 ### Step 3: Access the Application
 
 - **Frontend**: http://localhost:3000
-- **API**: http://localhost:8080/api
+- **API**: http://localhost:8081/api
+- **API Documentation (Swagger)**: http://localhost:8081/api/documentation
 - **Database**: localhost:3306 (username: root, password: root, database: tms_db)
 
 ## Development
@@ -232,7 +233,7 @@ docker-compose up -d --build
 ## Troubleshooting
 
 ### Port Conflicts
-If ports 3000, 3306, or 8080 are already in use, modify the port mappings in `docker-compose.yml`.
+If ports 3000, 3306, or 8081 are already in use, modify the port mappings in `docker-compose.yml`.
 
 ### Database Connection Issues
 Ensure the database container is running and check the `.env` file in the `api` directory for correct database credentials.

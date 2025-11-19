@@ -67,8 +67,8 @@ echo "🛑 Stopping existing Docker containers..."
 docker compose down 2>/dev/null || true
 
 # Check and free required ports
-echo "🔍 Checking required ports (3000, 8080, 3306)..."
-PORTS=(3000 8080 3306)
+echo "🔍 Checking required ports (3000, 8081, 3306)..."
+PORTS=(3000 8081 3306)
 PORT_NAMES=("Frontend" "API/Nginx" "MySQL")
 PORT_FREE=true
 
@@ -110,17 +110,43 @@ docker compose exec -T app cp .env.example .env 2>/dev/null || echo "    .env al
 
 # Create necessary Laravel directories and set permissions (as root)
 echo "  - Creating Laravel directories and setting permissions..."
-docker compose exec -T -u root app mkdir -p /var/www/html/bootstrap/cache
-docker compose exec -T -u root app mkdir -p /var/www/html/storage/framework/{sessions,views,cache}
-docker compose exec -T -u root app mkdir -p /var/www/html/storage/logs
-docker compose exec -T -u root app chown -R www-data:www-data /var/www/html
-docker compose exec -T -u root app chmod -R 775 /var/www/html/bootstrap/cache
-docker compose exec -T -u root app chmod -R 775 /var/www/html/storage
+docker compose exec -T -u root app sh -c "
+    mkdir -p /var/www/html/bootstrap/cache
+    mkdir -p /var/www/html/storage/framework/sessions
+    mkdir -p /var/www/html/storage/framework/views
+    mkdir -p /var/www/html/storage/framework/cache
+    mkdir -p /var/www/html/storage/logs
+    chown -R www-data:www-data /var/www/html
+    chmod -R 775 /var/www/html/bootstrap/cache
+    chmod -R 775 /var/www/html/storage
+    chmod -R 777 /var/www/html/storage/logs
+    chmod -R 777 /var/www/html/storage/framework
+    touch /var/www/html/storage/logs/laravel.log
+    chown www-data:www-data /var/www/html/storage/logs/laravel.log
+    chmod 666 /var/www/html/storage/logs/laravel.log
+"
 
 # Install Composer dependencies (as root to avoid permission issues)
 echo "  - Installing Composer dependencies..."
 docker compose exec -T -u root app composer install --no-interaction
-docker compose exec -T -u root app chown -R www-data:www-data /var/www/html
+# Fix permissions again after composer install (volume mount may override)
+# Set ownership for code files to current user, storage/cache to www-data
+USER_ID=$(id -u)
+GROUP_ID=$(id -g)
+docker compose exec -T -u root app sh -c "
+    # Code files owned by user for editing
+    chown -R $USER_ID:$GROUP_ID /var/www/html/app
+    chown -R $USER_ID:$GROUP_ID /var/www/html/routes
+    chown -R $USER_ID:$GROUP_ID /var/www/html/composer.json
+    chown -R $USER_ID:$GROUP_ID /var/www/html/config
+    # Storage and cache owned by www-data for runtime
+    chown -R www-data:www-data /var/www/html/storage
+    chown -R www-data:www-data /var/www/html/bootstrap/cache
+    chmod -R 775 /var/www/html/bootstrap/cache
+    chmod -R 775 /var/www/html/storage
+    chmod -R 777 /var/www/html/storage/logs
+    chmod -R 777 /var/www/html/storage/framework
+"
 
 # Generate application key
 echo "  - Generating application key..."
@@ -129,6 +155,16 @@ docker compose exec -T app php artisan key:generate --force
 # Run migrations and seeders
 echo "  - Running database migrations and seeders..."
 docker compose exec -T app php artisan migrate --seed --force
+
+# Setup Swagger documentation
+echo "  - Setting up Swagger documentation..."
+docker compose exec -T -u root app sh -c "
+    mkdir -p /var/www/html/storage/api-docs
+    php artisan vendor:publish --provider \"L5Swagger\L5SwaggerServiceProvider\" --tag=l5-swagger-config
+    php artisan l5-swagger:generate
+    chown -R www-data:www-data /var/www/html/storage/api-docs
+    chmod -R 775 /var/www/html/storage/api-docs
+"
 
 echo ""
 echo "📦 Setting up Frontend..."
@@ -165,7 +201,8 @@ echo "✅ Setup complete!"
 echo ""
 echo "🌐 Access the application:"
 echo "   Frontend: http://localhost:3000"
-echo "   API: http://localhost:8080/api"
+echo "   API: http://localhost:8081/api"
+echo "   API Documentation (Swagger): http://localhost:8081/api/documentation"
 echo ""
 echo "📋 To check logs:"
 echo "   docker compose logs -f"
