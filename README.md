@@ -78,21 +78,21 @@ cd TMS-tenant
 
 ### Step 2: Run Setup Script (Recommended)
 
-Từ thư mục gốc của project, chạy script setup tự động:
+From the project root directory, run the automated setup script:
 
 ```bash
 ./setup.sh
 ```
 
-Script này sẽ tự động:
-- Khởi động Docker containers
-- Copy file .env
-- Cài đặt Composer dependencies
+This script will automatically:
+- Start Docker containers
+- Copy .env file
+- Install Composer dependencies
 - Generate application key
-- Chạy migrations và seeders
-- Cài đặt npm dependencies
+- Run migrations and seeders
+- Install npm dependencies
 
-### Hoặc Setup Thủ Công:
+### Manual Setup:
 
 #### Step 2a: Start Docker Containers
 
@@ -115,7 +115,7 @@ This will:
 docker-compose exec app cp .env.example .env
 ```
 
-2. Install PHP dependencies (QUAN TRỌNG - phải chạy lệnh này):
+2. Install PHP dependencies (IMPORTANT - must run this command):
 ```bash
 docker-compose exec app composer install
 ```
